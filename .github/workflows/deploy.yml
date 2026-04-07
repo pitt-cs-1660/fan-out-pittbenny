@@ -6,17 +6,13 @@ on:
       - main
 
 env:
-  AWS_REGION: us-east-1  # update if you are in a different region
-  AWS_LAMBDA_ROLE_ARN: arn:aws:iam::448792657937:role/lambda-fanout-role  # replace with your ARN
+  AWS_REGION: us-east-1
+  AWS_LAMBDA_ROLE_ARN: arn:aws:iam::448792657937:role/lambda-fanout-role
 
 jobs:
-  deploy-metadata-extractor:
-    name: Deploy Metadata Extractor Lambda
+  deploy:
+    name: Build and Deploy Lambdas
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-      contents: read
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -32,116 +28,28 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build, tag, and push metadata-extractor image to Amazon ECR
-        id: metadata-extractor-build-image
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: metadata-extractor
-          IMAGE_TAG: ${{ github.sha }}
+      # Deploy Metadata Extractor
+      - name: Build and Push Metadata Extractor
         run: |
           cd lambda/metadata_extractor
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
-          exit 1
+          docker build -t ${{ steps.login-ecr.outputs.registry }}/metadata-extractor:${{ github.sha }} .
+          docker push ${{ steps.login-ecr.outputs.registry }}/metadata-extractor:${{ github.sha }}
 
-      - name: Check if Lambda function exists
-        id: check-lambda-metadata-extractor
-        run: |
-          if aws lambda get-function --function-name metadata-extractor --region ${{ env.AWS_REGION }} 2>/dev/null; then
-            echo "exists=true" >> $GITHUB_OUTPUT
-          else
-            echo "exists=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Create Lambda function
-        if: steps.check-lambda-metadata-extractor.outputs.exists == 'false'
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: metadata-extractor
-          IMAGE_TAG: ${{ github.sha }}
-        run: |
-          aws lambda create-function \
-            --function-name metadata-extractor \
-            --package-type Image \
-            --code ImageUri=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
-            --role ${{ env.AWS_LAMBDA_ROLE_ARN }} \
-            --timeout 30 \
-            --memory-size 128 \
-            --region ${{ env.AWS_REGION }}
-
-      - name: Update metadata-extractor Lambda function
-        if: steps.check-lambda-metadata-extractor.outputs.exists == 'true'
+      - name: Update Metadata Extractor Lambda
         run: |
           aws lambda update-function-code \
             --function-name metadata-extractor \
-            --image-uri ${{ steps.login-ecr.outputs.registry }}/metadata-extractor:${{ github.sha }} \
-            --region ${{ env.AWS_REGION }}
+            --image-uri ${{ steps.login-ecr.outputs.registry }}/metadata-extractor:${{ github.sha }}
 
-  deploy-image-validator:
-    name: Deploy Image Validator Lambda
-    runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-      contents: read
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Build, tag, and push image-validator image to Amazon ECR
-        id: image-validator-build-image
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: image-validator
-          IMAGE_TAG: ${{ github.sha }}
+      # Deploy Image Validator
+      - name: Build and Push Image Validator
         run: |
           cd lambda/image_validator
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
-          exit 1
+          docker build -t ${{ steps.login-ecr.outputs.registry }}/image-validator:${{ github.sha }} .
+          docker push ${{ steps.login-ecr.outputs.registry }}/image-validator:${{ github.sha }}
 
-      - name: Check if Lambda function exists
-        id: check-lambda-image-validator
-        run: |
-          if aws lambda get-function --function-name image-validator --region ${{ env.AWS_REGION }} 2>/dev/null; then
-            echo "exists=true" >> $GITHUB_OUTPUT
-          else
-            echo "exists=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Create Lambda function
-        if: steps.check-lambda-image-validator.outputs.exists == 'false'
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: image-validator
-          IMAGE_TAG: ${{ github.sha }}
-        run: |
-          aws lambda create-function \
-            --function-name image-validator \
-            --package-type Image \
-            --code ImageUri=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
-            --role ${{ env.AWS_LAMBDA_ROLE_ARN }} \
-            --timeout 30 \
-            --memory-size 128 \
-            --region ${{ env.AWS_REGION }}
-
-      - name: Update image-validator Lambda function
-        if: steps.check-lambda-image-validator.outputs.exists == 'true'
+      - name: Update Image Validator Lambda
         run: |
           aws lambda update-function-code \
             --function-name image-validator \
-            --image-uri ${{ steps.login-ecr.outputs.registry }}/image-validator:${{ github.sha }} \
-            --region ${{ env.AWS_REGION }}
+            --image-uri ${{ steps.login-ecr.outputs.registry }}/image-validator:${{ github.sha }}
