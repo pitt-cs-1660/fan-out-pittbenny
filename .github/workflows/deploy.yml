@@ -72,13 +72,11 @@ jobs:
 
       - name: Update metadata-extractor Lambda function
         if: steps.check-lambda-metadata-extractor.outputs.exists == 'true'
-        uses: aws-actions/aws-lambda-deploy@v1.1.0
-        with:
-          function-name: metadata-extractor
-          package-type: Image  # no zip!
-          image-uri: ${{ steps.metadata-extractor-build-image.outputs.image }}  # ECR image URI from previous step
-          role: ${{ env.AWS_LAMBDA_ROLE_ARN }}
-          publish: true
+        run: |
+          aws lambda update-function-code \
+            --function-name metadata-extractor \
+            --image-uri ${{ steps.login-ecr.outputs.registry }}/metadata-extractor:${{ github.sha }} \
+            --region ${{ env.AWS_REGION }}
 
   deploy-image-validator:
     name: Deploy Image Validator Lambda
@@ -142,10 +140,8 @@ jobs:
 
       - name: Update image-validator Lambda function
         if: steps.check-lambda-image-validator.outputs.exists == 'true'
-        uses: aws-actions/aws-lambda-deploy@v1.1.0
-        with:
-          function-name: image-validator
-          package-type: Image  # no zip!
-          image-uri: ${{ steps.image-validator-build-image.outputs.image }}  # ECR image URI from previous step
-          role: ${{ env.AWS_LAMBDA_ROLE_ARN }}
-          publish: true
+        run: |
+          aws lambda update-function-code \
+            --function-name image-validator \
+            --image-uri ${{ steps.login-ecr.outputs.registry }}/image-validator:${{ github.sha }} \
+            --region ${{ env.AWS_REGION }}
